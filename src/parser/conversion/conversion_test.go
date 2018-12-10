@@ -35,7 +35,7 @@ func TestConvertRowsEventsToMessages(t *testing.T) {
 	tableMetadata := database.TableMetadata{
 		Schema: "db_name",
 		Table:  "table_name",
-		Fields: map[int]string{0: "field_1", 1: "field_2"},
+		Fields: []string{"field_1", "field_2"},
 	}
 
 	testCasesWriteRowsEvents := []struct {

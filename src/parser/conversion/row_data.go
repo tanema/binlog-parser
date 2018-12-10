@@ -6,7 +6,7 @@ import (
 	"github.com/tanema/binlog-parser/src/parser/messages"
 )
 
-func mapRowDataToColumnNames(rows [][]interface{}, columnNames map[int]string) []messages.MessageRowData {
+func mapRowDataToColumnNames(rows [][]interface{}, columnNames []string) []messages.MessageRowData {
 	var mappedRows []messages.MessageRowData
 
 	for _, row := range rows {
@@ -20,12 +20,7 @@ func mapRowDataToColumnNames(rows [][]interface{}, columnNames map[int]string) [
 				data[fmt.Sprintf("(unknown_%d)", unknownCount)] = columnValue
 				unknownCount++
 			} else {
-				columnName, exists := columnNames[columnIndex]
-
-				if !exists {
-					panic(fmt.Sprintf("No mismatch between row and column names array detected, but column %s not found", columnName))
-				}
-
+				columnName := columnNames[columnIndex]
 				data[columnName] = columnValue
 			}
 		}
@@ -40,7 +35,7 @@ func mapRowDataToColumnNames(rows [][]interface{}, columnNames map[int]string) [
 	return mappedRows
 }
 
-func detectMismatch(row []interface{}, columnNames map[int]string) (bool, string) {
+func detectMismatch(row []interface{}, columnNames []string) (bool, string) {
 	if len(row) > len(columnNames) {
 		return true, fmt.Sprintf("column names array is missing field(s), will map them as unknown_*")
 	}

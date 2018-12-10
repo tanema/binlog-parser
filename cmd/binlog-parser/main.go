@@ -61,5 +61,5 @@ func parseBinlogFile(binlogFilename, dbDsn string) error {
 	}
 	defer db.Close()
 
-	return parser.ParseBinlog(binlogFilename, database.NewTableMap(db), chain)
+	return parser.ParseBinlog(binlogFilename, db, chain)
 }

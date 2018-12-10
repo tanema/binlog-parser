@@ -2,90 +2,54 @@ package database
 
 import (
 	"database/sql"
-	"fmt"
 )
 
+// TableMetadata encapsulates the column data for a table
 type TableMetadata struct {
+	ID     uint64
 	Schema string
 	Table  string
-	Fields map[int]string
+	Fields []string
 }
 
+// TableMap keeps track of the table metadata for all tables in the database
 type TableMap struct {
-	tableMetadataMap map[uint64]TableMetadata
-	fieldsCache      map[string]map[int]string
-	db               *sql.DB
+	db      *sql.DB
+	idMap   map[uint64]string
+	nameMap map[string]TableMetadata
 }
 
-func NewTableMap(db *sql.DB) TableMap {
-	return TableMap{
-		db:               db,
-		tableMetadataMap: make(map[uint64]TableMetadata),
-		fieldsCache:      make(map[string]map[int]string),
+func newTableMap(db *sql.DB) *TableMap {
+	return &TableMap{
+		db:      db,
+		idMap:   make(map[uint64]string),
+		nameMap: make(map[string]TableMetadata),
 	}
 }
 
+// Add will add the metadata for this table into the database map
 func (m *TableMap) Add(id uint64, schema, table string) error {
-	fields, err := m.getFields(schema, table)
-
+	fields, err := getFieldsFromDb(m.db, schema, table)
 	if err != nil {
 		return err
 	}
-
-	m.tableMetadataMap[id] = TableMetadata{schema, table, fields}
-
+	name := schema + "/" + table
+	m.nameMap[name] = TableMetadata{
+		ID:     id,
+		Schema: schema,
+		Table:  table,
+		Fields: fields,
+	}
+	m.idMap[id] = name
 	return nil
 }
 
+// LookupTableMetadata will find the cached metadata for a table we are tracking
 func (m *TableMap) LookupTableMetadata(id uint64) (TableMetadata, bool) {
-	val, ok := m.tableMetadataMap[id]
-	return val, ok
-}
-
-func (m *TableMap) getFields(schema, table string) (map[int]string, error) {
-	cacheKey := fmt.Sprintf("%s_%s", schema, table)
-
-	if cachedFields, ok := m.fieldsCache[cacheKey]; ok {
-		return cachedFields, nil
+	name, ok := m.idMap[id]
+	if !ok {
+		return TableMetadata{}, false
 	}
-
-	fields, err := getFieldsFromDb(m.db, schema, table)
-	m.fieldsCache[cacheKey] = fields
-
-	if err != nil {
-		return nil, err
-	}
-
-	return fields, nil
-}
-
-func getFieldsFromDb(db *sql.DB, schema string, table string) (map[int]string, error) {
-	rows, err := db.Query(
-		"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION",
-		schema,
-		table,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	defer rows.Close()
-
-	fields := make(map[int]string)
-	i := 0
-
-	var columnName string
-	for rows.Next() {
-		err := rows.Scan(&columnName)
-
-		if err != nil {
-			return nil, err
-		}
-
-		fields[i] = columnName
-		i++
-	}
-
-	return fields, nil
+	metadata, ok := m.nameMap[name]
+	return metadata, ok
 }

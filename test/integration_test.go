@@ -123,7 +123,7 @@ func parseBinlogFile(binlogFilename, dbDsn string, consumerChain parser.Consumer
 		return err
 	}
 	defer db.Close()
-	return parser.ParseBinlog(binlogFilename, database.NewTableMap(db), consumerChain)
+	return parser.ParseBinlog(binlogFilename, db, consumerChain)
 }
 
 func databaseBootstrap(resource *dockertest.Resource) (string, func() error) {
@@ -161,41 +161,29 @@ func TestLookupTableMetadata(t *testing.T) {
 	defer db.Close()
 
 	t.Run("Found", func(t *testing.T) {
-		tableMap := database.NewTableMap(db)
-		tableMap.Add(1, "test_db", "buildings")
-		tableMap.Add(2, "test_db", "rooms")
-
-		assertTableMetadata(t, &tableMap, 1, "test_db", "buildings")
-		assertTableMetadata(t, &tableMap, 2, "test_db", "rooms")
+		assertTableMetadata(t, db, 1063, "test_db", "buildings")
+		assertTableMetadata(t, db, 1067, "test_db", "rooms")
 	})
 
 	t.Run("Fields", func(t *testing.T) {
-		tableMap := database.NewTableMap(db)
-		tableMap.Add(1, "test_db", "buildings")
-		tableMetadata, ok := tableMap.LookupTableMetadata(1)
+		tableMetadata, ok := db.Map.LookupTableMetadata(1063)
 		if ok != true {
 			t.Fatal("Expected table metadata to be found")
 		}
-		expectedFields := map[int]string{
-			0: "building_no",
-			1: "building_name",
-			2: "address",
-		}
+		expectedFields := []string{"building_no", "building_name", "address"}
 		if !reflect.DeepEqual(tableMetadata.Fields, expectedFields) {
 			t.Fatal("Wrong fields in table metadata")
 		}
 	})
 	t.Run("Not Found", func(t *testing.T) {
-		tableMap := database.NewTableMap(db)
-		_, ok := tableMap.LookupTableMetadata(999)
-		if ok != false {
+		if _, ok := db.Map.LookupTableMetadata(999); ok != false {
 			t.Fatal("Expected table metadata not to be found")
 		}
 	})
 }
 
-func assertTableMetadata(t *testing.T, tableMap *database.TableMap, tableid uint64, expectedSchema string, expectedTable string) {
-	tableMetadata, ok := tableMap.LookupTableMetadata(tableid)
+func assertTableMetadata(t *testing.T, db *database.DB, tableid uint64, expectedSchema string, expectedTable string) {
+	tableMetadata, ok := db.Map.LookupTableMetadata(tableid)
 
 	if ok != true {
 		t.Fatal(fmt.Sprintf("metadata not found for table id %d", tableid))

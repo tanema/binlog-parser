@@ -15,7 +15,7 @@ type ConsumerFunc func(messages.Message) error
 
 // ParseBinlogToMessages will parse the binlog and emit messages to the consumer
 // for each message
-func ParseBinlogToMessages(binlogFilename string, tableMap database.TableMap, consumer ConsumerFunc) error {
+func ParseBinlogToMessages(binlogFilename string, db *database.DB, consumer ConsumerFunc) error {
 	rowRowsEventBuffer := newRowsEventBuffer()
 	return replication.NewBinlogParser().ParseFile(binlogFilename, 0, func(e *replication.BinlogEvent) error {
 		switch e.Header.EventType {
@@ -39,13 +39,13 @@ func ParseBinlogToMessages(binlogFilename string, tableMap database.TableMap, co
 			schema := string(tableMapEvent.Schema)
 			table := string(tableMapEvent.Table)
 			tableID := uint64(tableMapEvent.TableID)
-			if err := tableMap.Add(tableID, schema, table); err != nil {
+			if err := db.Map.Add(tableID, schema, table); err != nil {
 				return err
 			}
 		case replication.WRITE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv1, replication.DELETE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2, replication.UPDATE_ROWS_EVENTv2, replication.DELETE_ROWS_EVENTv2:
 			rowsEvent := e.Event.(*replication.RowsEvent)
 			tableID := uint64(rowsEvent.TableID)
-			tableMetadata, ok := tableMap.LookupTableMetadata(tableID)
+			tableMetadata, ok := db.Map.LookupTableMetadata(tableID)
 			if !ok {
 				return nil
 			}

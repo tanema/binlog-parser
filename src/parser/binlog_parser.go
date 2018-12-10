@@ -8,9 +8,9 @@ import (
 )
 
 // ParseBinlog sets up a consumer and parser for a binlog
-func ParseBinlog(binlogFilename string, tableMap database.TableMap, consumerChain ConsumerChain) error {
+func ParseBinlog(binlogFilename string, db *database.DB, consumerChain ConsumerChain) error {
 	if _, err := os.Stat(binlogFilename); os.IsNotExist(err) {
 		return err
 	}
-	return parser.ParseBinlogToMessages(binlogFilename, tableMap, consumerChain.consumeMessage)
+	return parser.ParseBinlogToMessages(binlogFilename, db, consumerChain.consumeMessage)
 }
