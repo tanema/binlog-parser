@@ -108,6 +108,7 @@ func mapRowDataToColumnNames(rows [][]interface{}, columnNames []string) []Messa
 		unknownCount := 0
 
 		detectedMismatch, mismatchNotice := detectMismatch(row, columnNames)
+		// TODO re-query column names and update table map?
 
 		for columnIndex, columnValue := range row {
 			if detectedMismatch {

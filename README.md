@@ -1,90 +1,28 @@
 # binlog-parser
 
-[![Build Status](https://travis-ci.org/zalora/binlog-parser.svg?branch=master)](https://travis-ci.org/zalora/binlog-parser)
-
-A tool for parsing a MySQL binlog file to JSON. Reads a binlog input file, queries a database for field names, writes JSON to stdout. The output looks like this:
-
-    {
-        "Header": {
-            "Schema": "test_db",
-            "Table": "buildings",
-            "BinlogMessageTime": "2017-04-13T06:34:30Z",
-            "BinlogPosition": 397,
-            "XId": 9
-        },
-        "Type": "Insert",
-        "Data": {
-            "Row": {
-                "address": "3950 North 1st Street CA 95134",
-                "building_name": "ACME Headquaters",
-                "building_no": 1
-            },
-            "MappingNotice": ""
-        }
-    }
-    ...
-
-# Installation
-
-Requires Go version 1.7 or higher.
-
-    $ git clone https://github.com/zalora/binlog-parser.git
-    $ cd binlog-parser
-    $ git submodule update --init
-    $ make
-    $ ./bin/binlog-parser -h
+A tool for parsing a MySQL binlog file, and emiting them as message events
 
 ## Assumptions
 
 - It is assumed that MySQL row-based binlog format is used (or mixed, but be aware, that then only the row-formatted data in mixed binlogs can be extracted)
 - This tool is written with MySQL 5.6 in mind, although it should also work for MariaDB when GTIDs are not used
 
-# Usage
+# Command Usage
+
+Install by running `make`
 
 Run `binlog-parser -h` to get the list of available options:
 
-    Usage:	binlog-parser [options ...] binlog
+    Usage:  binlog-parser [options ...] connection_string binlog
 
     Options are:
 
-      -alsologtostderr
-        	log to standard error as well as files
       -include_schemas string
-        	comma-separated list of schemas to include
+          comma-separated list of schemas to include
       -include_tables string
-        	comma-separated list of tables to include
-      -log_backtrace_at value
-        	when logging hits line file:N, emit a stack trace
-      -log_dir string
-        	If non-empty, write log files in this directory
-      -logtostderr
-        	log to standard error instead of files
+          comma-separated list of tables to include
       -prettyprint
-        	Pretty print json
-      -stderrthreshold value
-        	logs at or above this threshold go to stderr
-      -v value
-        	log level for V logs
-      -vmodule value
-        	comma-separated list of pattern=N settings for file-filtered logging
-
-    Required environment variables:
-
-    DB_DSN	 Database connection string, needs read access to information_schema
-
-## Example usage
-
-Using `dbuser` and no password, connecting to `information_schema` database on localhost, parsing the binlog file `/some/binlog.bin`:
-
-    DB_DSN=dbuser@/information_schema ./binlog-parser /some/binlog.bin
-
-## Matching field names and data
-
-The mysql binlog format doesn't include the fieldnames for row events (INSERT/UPDATE/DELETE). As the goal of the parser is to output
-usable JSON, it connects to a running MySQL instance and queries the `information_schema` database for information on field names in the table.
-
-The database connection is creatd by using the environment variable `DB_DSN`, which should contain the database credentials in the form of
-`user:password@/dbname` - the format that the [Go MySQL driver](https://godoc.org/github.com/go-sql-driver/mysql) uses.
+          Pretty print json
 
 ## Effect of schema changes
 
