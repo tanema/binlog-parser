@@ -1,15 +1,15 @@
-package conversion
+package parser
 
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/siddontang/go-mysql/replication"
 
 	"github.com/tanema/binlog-parser/src/database"
-	"github.com/tanema/binlog-parser/src/parser/messages"
 )
 
 func TestConvertQueryEventToMessage(t *testing.T) {
@@ -21,9 +21,9 @@ func TestConvertQueryEventToMessage(t *testing.T) {
 
 	message := ConvertQueryEventToMessage(eventHeader, queryEvent)
 
-	assertMessageHeader(t, message, logPos, messages.MessageTypeQuery)
+	assertMessageHeader(t, message, logPos, MessageTypeQuery)
 
-	if string(message.(messages.QueryMessage).Query) != query {
+	if string(message.(QueryMessage).Query) != query {
 		t.Fatal("Unexpected value for query ")
 	}
 }
@@ -57,18 +57,18 @@ func TestConvertRowsEventsToMessages(t *testing.T) {
 				t.Fatal("Expected 2 insert messages to be created")
 			}
 
-			assertMessageHeader(t, convertedMessages[0], logPos, messages.MessageTypeInsert)
-			assertMessageHeader(t, convertedMessages[1], logPos, messages.MessageTypeInsert)
+			assertMessageHeader(t, convertedMessages[0], logPos, MessageTypeInsert)
+			assertMessageHeader(t, convertedMessages[1], logPos, MessageTypeInsert)
 
-			insertMessageOne := convertedMessages[0].(messages.InsertMessage)
+			insertMessageOne := convertedMessages[0].(InsertMessage)
 
-			if !reflect.DeepEqual(insertMessageOne.Data, messages.MessageRowData{Row: messages.MessageRow{"field_1": "value_1", "field_2": "value_2"}}) {
+			if !reflect.DeepEqual(insertMessageOne.Data, MessageRowData{Row: MessageRow{"field_1": "value_1", "field_2": "value_2"}}) {
 				t.Fatal(fmt.Sprintf("Wrong data for insert message 1 - got %v", insertMessageOne.Data))
 			}
 
-			insertMessageTwo := convertedMessages[1].(messages.InsertMessage)
+			insertMessageTwo := convertedMessages[1].(InsertMessage)
 
-			if !reflect.DeepEqual(insertMessageTwo.Data, messages.MessageRowData{Row: messages.MessageRow{"field_1": "value_3", "field_2": "value_4"}}) {
+			if !reflect.DeepEqual(insertMessageTwo.Data, MessageRowData{Row: MessageRow{"field_1": "value_3", "field_2": "value_4"}}) {
 				t.Fatal(fmt.Sprintf("Wrong data for insert message 2 - got %v", insertMessageTwo.Data))
 			}
 		})
@@ -93,18 +93,18 @@ func TestConvertRowsEventsToMessages(t *testing.T) {
 				t.Fatal("Expected 2 delete messages to be created")
 			}
 
-			assertMessageHeader(t, convertedMessages[0], logPos, messages.MessageTypeDelete)
-			assertMessageHeader(t, convertedMessages[1], logPos, messages.MessageTypeDelete)
+			assertMessageHeader(t, convertedMessages[0], logPos, MessageTypeDelete)
+			assertMessageHeader(t, convertedMessages[1], logPos, MessageTypeDelete)
 
-			deleteMessageOne := convertedMessages[0].(messages.DeleteMessage)
+			deleteMessageOne := convertedMessages[0].(DeleteMessage)
 
-			if !reflect.DeepEqual(deleteMessageOne.Data, messages.MessageRowData{Row: messages.MessageRow{"field_1": "value_1", "field_2": "value_2"}}) {
+			if !reflect.DeepEqual(deleteMessageOne.Data, MessageRowData{Row: MessageRow{"field_1": "value_1", "field_2": "value_2"}}) {
 				t.Fatal(fmt.Sprintf("Wrong data for delete message 1 - got %v", deleteMessageOne.Data))
 			}
 
-			deleteMessageTwo := convertedMessages[1].(messages.DeleteMessage)
+			deleteMessageTwo := convertedMessages[1].(DeleteMessage)
 
-			if !reflect.DeepEqual(deleteMessageTwo.Data, messages.MessageRowData{Row: messages.MessageRow{"field_1": "value_3", "field_2": "value_4"}}) {
+			if !reflect.DeepEqual(deleteMessageTwo.Data, MessageRowData{Row: MessageRow{"field_1": "value_3", "field_2": "value_4"}}) {
 				t.Fatal(fmt.Sprintf("Wrong data for delete message 2 - got %v", deleteMessageTwo.Data))
 			}
 		})
@@ -129,15 +129,15 @@ func TestConvertRowsEventsToMessages(t *testing.T) {
 				t.Fatal("Expected 1 update messages to be created")
 			}
 
-			assertMessageHeader(t, convertedMessages[0], logPos, messages.MessageTypeUpdate)
+			assertMessageHeader(t, convertedMessages[0], logPos, MessageTypeUpdate)
 
-			updateMessage := convertedMessages[0].(messages.UpdateMessage)
+			updateMessage := convertedMessages[0].(UpdateMessage)
 
-			if !reflect.DeepEqual(updateMessage.OldData, messages.MessageRowData{Row: messages.MessageRow{"field_1": "value_1", "field_2": "value_2"}}) {
+			if !reflect.DeepEqual(updateMessage.OldData, MessageRowData{Row: MessageRow{"field_1": "value_1", "field_2": "value_2"}}) {
 				t.Fatal(fmt.Sprintf("Wrong data for update message old data - got %v", updateMessage.OldData))
 			}
 
-			if !reflect.DeepEqual(updateMessage.NewData, messages.MessageRowData{Row: messages.MessageRow{"field_1": "value_3", "field_2": "value_4"}}) {
+			if !reflect.DeepEqual(updateMessage.NewData, MessageRowData{Row: MessageRow{"field_1": "value_3", "field_2": "value_4"}}) {
 				t.Fatal(fmt.Sprintf("Wrong data for update message new data - got %v", updateMessage.NewData))
 			}
 		})
@@ -156,6 +156,48 @@ func TestConvertRowsEventsToMessages(t *testing.T) {
 	})
 }
 
+func TestDetectMismatch(t *testing.T) {
+	t.Run("No mismatch, empty input", func(t *testing.T) {
+		row := []interface{}{}
+		columnNames := []string{}
+		if detected, _ := detectMismatch(row, columnNames); detected {
+			t.Fatal("Expected no mismatch to be detected")
+		}
+	})
+
+	t.Run("No mismatch", func(t *testing.T) {
+		row := []interface{}{"value 1", "value 2"}
+		columnNames := []string{"field_1", "field_2"}
+		if detected, _ := detectMismatch(row, columnNames); detected {
+			t.Fatal("Expected no mismatch to be detected")
+		}
+	})
+
+	t.Run("Detect mismatch, row is missing field", func(t *testing.T) {
+		row := []interface{}{"value 1"}
+		columnNames := []string{"field_1", "field_2"}
+		detected, notice := detectMismatch(row, columnNames)
+		if !detected {
+			t.Fatal("Expected mismatch to be detected")
+		}
+		if !strings.Contains(notice, "row is missing field(s)") {
+			t.Fatal("Wrong notice")
+		}
+	})
+
+	t.Run("Detect mismatch, column name is missing field", func(t *testing.T) {
+		row := []interface{}{"value 1", "value 2"}
+		columnNames := []string{"field_1"}
+		detected, notice := detectMismatch(row, columnNames)
+		if !detected {
+			t.Fatal("Expected mismatch to be detected")
+		}
+		if !strings.Contains(notice, "column names array is missing field(s)") {
+			t.Fatal("Wrong notice")
+		}
+	})
+}
+
 func createEventHeader(logPos uint32, eventType replication.EventType) replication.EventHeader {
 	return replication.EventHeader{
 		Timestamp: uint32(time.Now().Unix()),
@@ -168,7 +210,7 @@ func createRowsEvent(rowData ...[]interface{}) replication.RowsEvent {
 	return replication.RowsEvent{Rows: rowData}
 }
 
-func assertMessageHeader(t *testing.T, message messages.Message, expectedLogPos uint32, expectedType messages.MessageType) {
+func assertMessageHeader(t *testing.T, message Message, expectedLogPos uint32, expectedType MessageType) {
 	if message.GetHeader().BinlogPosition != expectedLogPos {
 		t.Fatal("Unexpected value for BinlogPosition")
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -47,16 +48,10 @@ func TestMain(m *testing.M) {
 }
 
 func TestParseBinlogFile(t *testing.T) {
-	createConsumerChain := func(stream io.Writer) parser.ConsumerChain {
-		chain := parser.NewConsumerChain()
-		chain.CollectAsJSON(stream, true)
-		return chain
-	}
-
 	t.Run("binlog file not found", func(t *testing.T) {
 		tmpfile, _ := ioutil.TempFile("", "test")
 		defer os.RemoveAll(tmpfile.Name())
-		if err := parseBinlogFile("/not/there", connStr+"test_db", createConsumerChain(tmpfile)); err == nil {
+		if err := parseBinlogFile("/not/there", connStr+"test_db", tmpfile, []string{}, []string{}); err == nil {
 			t.Fatal("Expected error when parsing non-existing file")
 		}
 	})
@@ -84,46 +79,46 @@ func TestParseBinlogFile(t *testing.T) {
 		t.Run(fmt.Sprintf("Parse binlog %s", tc.fixtureFilename), func(t *testing.T) {
 			var buffer bytes.Buffer
 			binlogFilename := filepath.Join(dataDir, tc.fixtureFilename)
-			chain := createConsumerChain(&buffer)
-			chain.IncludeTables(tc.includeTables)
-			chain.IncludeSchemas(tc.includeSchemas)
-			if err := parseBinlogFile(binlogFilename, connStr+"test_db", chain); err != nil {
+			if err := parseBinlogFile(binlogFilename, connStr+"test_db", &buffer, tc.includeTables, tc.includeSchemas); err != nil {
 				t.Fatal(fmt.Sprintf("Expected no error when successfully parsing file %s", err))
 			}
-			assertJSON(t, buffer, filepath.Join(dataDir, tc.expectedJSONFile))
+			expectedJSONFile := filepath.Join(dataDir, tc.expectedJSONFile)
+			expectedJSON, err := ioutil.ReadFile(expectedJSONFile)
+			if err != nil {
+				t.Fatal(fmt.Sprintf("Failed to open expected JSON file: %s", err))
+			}
+			expected := strings.TrimSpace(string(expectedJSON))
+			actual := strings.TrimSpace(buffer.String())
+			if expected != actual {
+				errorMessage := fmt.Sprintf(
+					"JSON file %s does not match\nExpected:\n==========\n%s\n==========\nActual generated:\n%s\n==========",
+					expectedJSONFile,
+					expected,
+					actual,
+				)
+				t.Fatal(errorMessage)
+			}
 		})
 	}
 }
 
-func assertJSON(t *testing.T, buffer bytes.Buffer, expectedJSONFile string) {
-	expectedJSON, err := ioutil.ReadFile(expectedJSONFile)
-
-	if err != nil {
-		t.Fatal(fmt.Sprintf("Failed to open expected JSON file: %s", err))
-	}
-
-	expected := strings.TrimSpace(string(expectedJSON))
-	actual := strings.TrimSpace(buffer.String())
-
-	if expected != actual {
-		errorMessage := fmt.Sprintf(
-			"JSON file %s does not match\nExpected:\n==========\n%s\n==========\nActual generated:\n%s\n==========",
-			expectedJSONFile,
-			expected,
-			actual,
-		)
-
-		t.Fatal(errorMessage)
-	}
-}
-
-func parseBinlogFile(binlogFilename, dbDsn string, consumerChain parser.ConsumerChain) error {
+func parseBinlogFile(binlogFilename, dbDsn string, stream io.Writer, includeTables, includeSchemas []string) error {
 	db, err := database.GetDatabaseInstance(dbDsn)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	return parser.ParseBinlog(binlogFilename, db, consumerChain)
+	p := parser.New(db, binlogFilename, func(message parser.Message) error {
+		data, err := json.MarshalIndent(message, "", "    ")
+		if err != nil {
+			return err
+		}
+		_, err = stream.Write([]byte(fmt.Sprintf("%s\n", data)))
+		return nil
+	})
+	p.IncludeTables(includeTables)
+	p.IncludeSchemas(includeSchemas)
+	return p.ParseBinlogToMessages()
 }
 
 func databaseBootstrap(resource *dockertest.Resource) (string, func() error) {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -38,28 +39,35 @@ func printUsage() {
 	flag.PrintDefaults()
 }
 
-func commaSeparatedListToArray(str string) []string {
-	var arr []string
-	for _, item := range strings.Split(str, ",") {
-		item = strings.TrimSpace(item)
-		if item != "" {
-			arr = append(arr, item)
-		}
-	}
-	return arr
-}
-
 func parseBinlogFile(binlogFilename, dbDsn string) error {
-	chain := parser.NewConsumerChain()
-	chain.CollectAsJSON(os.Stdout, *prettyPrintJSONFlag)
-	chain.IncludeTables(strings.Split(*includeTablesFlag, ","))
-	chain.IncludeSchemas(strings.Split(*includeSchemasFlag, ","))
-
 	db, err := database.GetDatabaseInstance(dbDsn)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	return parser.ParseBinlog(binlogFilename, db, chain)
+	if _, err := os.Stat(binlogFilename); os.IsNotExist(err) {
+		return err
+	}
+
+	p := parser.New(db, binlogFilename, consume)
+	p.IncludeTables(strings.Split(*includeTablesFlag, ","))
+	p.IncludeSchemas(strings.Split(*includeSchemasFlag, ","))
+	return p.ParseBinlogToMessages()
+}
+
+func consume(message parser.Message) error {
+	json, err := marshalMessage(message)
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write([]byte(fmt.Sprintf("%s\n", json)))
+	return err
+}
+
+func marshalMessage(message parser.Message) ([]byte, error) {
+	if *prettyPrintJSONFlag {
+		return json.MarshalIndent(message, "", "    ")
+	}
+	return json.Marshal(message)
 }

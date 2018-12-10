@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// DB keeps the db connection and a map of table information
 type DB struct {
 	*sql.DB
 	Map *TableMap
