@@ -108,7 +108,7 @@ func parseBinlogFile(binlogFilename, dbDsn string, stream io.Writer, includeTabl
 		return err
 	}
 	defer db.Close()
-	p := parser.New(db, binlogFilename, func(message parser.Message) error {
+	p := parser.New(db, func(message parser.Message) error {
 		data, err := json.MarshalIndent(message, "", "    ")
 		if err != nil {
 			return err
@@ -118,7 +118,7 @@ func parseBinlogFile(binlogFilename, dbDsn string, stream io.Writer, includeTabl
 	})
 	p.IncludeTables(includeTables)
 	p.IncludeSchemas(includeSchemas)
-	return p.ParseBinlogToMessages()
+	return p.ParseFile(binlogFilename, 0)
 }
 
 func databaseBootstrap(resource *dockertest.Resource) (string, func() error) {

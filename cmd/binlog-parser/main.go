@@ -50,10 +50,10 @@ func parseBinlogFile(binlogFilename, dbDsn string) error {
 		return err
 	}
 
-	p := parser.New(db, binlogFilename, consume)
+	p := parser.New(db, consume)
 	p.IncludeTables(strings.Split(*includeTablesFlag, ","))
 	p.IncludeSchemas(strings.Split(*includeSchemasFlag, ","))
-	return p.ParseBinlogToMessages()
+	return p.ParseFile(binlogFilename, 0)
 }
 
 func consume(message parser.Message) error {

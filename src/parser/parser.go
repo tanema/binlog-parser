@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"os"
 	"strings"
 
 	"github.com/siddontang/go-mysql/replication"
@@ -30,18 +31,16 @@ func (mb *rowsEventBuffer) drain() []RowsEventData {
 // predicates and then emits the messages
 type Parser struct {
 	consumer           ConsumerFunc
-	binlogFilename     string
 	rowRowsEventBuffer rowsEventBuffer
 	db                 *database.DB
 	predicates         []predicate
 }
 
 // New creates a new Parser for a binlog and database
-func New(db *database.DB, binlogFilename string, consumer ConsumerFunc) Parser {
+func New(db *database.DB, consumer ConsumerFunc) Parser {
 	return Parser{
 		db:                 db,
 		rowRowsEventBuffer: rowsEventBuffer{},
-		binlogFilename:     binlogFilename,
 		consumer:           consumer,
 	}
 }
@@ -74,13 +73,14 @@ func (p *Parser) IncludeSchemas(schemas []string) {
 	}
 }
 
-// ParseBinlogToMessages will parse the binlog and emit messages to the consumer
+// ParseFile will parse the binlog and emit messages to the consumer
 // for each message
-func (p *Parser) ParseBinlogToMessages() error {
-	return replication.NewBinlogParser().ParseFile(p.binlogFilename, 0, p.handleEvent)
+func (p *Parser) ParseFile(filename string, offset int64) error {
+	return replication.NewBinlogParser().ParseFile(filename, 0, p.handleEvent)
 }
 
 func (p *Parser) handleEvent(e *replication.BinlogEvent) error {
+	e.Dump(os.Stdout)
 	switch e.Header.EventType {
 	case replication.QUERY_EVENT:
 		queryEvent := e.Event.(*replication.QueryEvent)
